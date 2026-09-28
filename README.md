@@ -13,8 +13,9 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | [Metaphor_Detection.ipynb](Metaphor_Detection.ipynb) | Loads VUA-20, extracts concreteness and WordNet features, trains the LEMC detector, evaluates predictions, and saves the best checkpoint. |
 | [Metaphor_Sentiment.ipynb](Metaphor_Sentiment.ipynb) | First annotates review text with word-level metaphor predictions; then trains a RoBERTa sentiment classifier using those predictions. |
 | [README.md](README.md) | Data sources, environment setup, methodology, and instructions for running the notebooks. |
+| [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx) | Concreteness ratings workbook used by both notebooks. |
 
-The repository contains notebook source code. Datasets, the concreteness spreadsheet, trained checkpoints, and the manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
+The repository contains notebook source code and the concreteness ratings workbook in `resources/`. The metaphor and sentiment datasets, trained checkpoints, and manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
 
 The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books review CSV files** and implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, SST-2, IMDb, baselines, and ablations; separate ready-to-run configurations for all of these experiments are not included.
 
@@ -84,7 +85,7 @@ To use SST-2, export its `sentence` column as `text` and use its validation part
 
 ### Lexical resources
 
-- **Concreteness ratings:** obtain the resource associated with [Brysbaert, Warriner, and Kuperman (2014)](https://doi.org/10.3758/s13428-013-0403-5). The notebooks expect an Excel workbook with columns named exactly `Word` and `Conc.M`. If the downloaded resource is in another format, convert it to `.xlsx` while preserving these columns and the original scores. Ratings range from 1 to 5; words missing from the lookup receive `3.0`.
+- **Concreteness ratings:** use the bundled [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx), associated with [Brysbaert, Warriner, and Kuperman (2014)](https://doi.org/10.3758/s13428-013-0403-5). Set the workbook paths in both notebooks to `./resources/Concreteness ratings.xlsx` as shown below. The notebooks expect columns named exactly `Word` and `Conc.M`. Ratings range from 1 to 5; words missing from the lookup receive `3.0`.
 - **WordNet:** downloaded through NLTK. The code uses the first returned synset, its definition, shortest-path distances, and lowest-common-hypernym depths.
 - **spaCy English model:** `en_core_web_sm` supplies POS tags during sentiment-data annotation.
 
@@ -131,7 +132,7 @@ Run the stages in this order: **train the detector â†’ annotate sentiment data â
 
 ### 1. Prepare local paths
 
-The following is a suggested working layout. Only the two notebooks and README are supplied by the repository; create the resource/data directories and supply their contents locally. Model and annotation outputs are generated during execution.
+The following is a suggested working layout. The two notebooks, README, and `resources/Concreteness ratings.xlsx` are supplied by the repository. Create the data directories and provide the sentiment CSV files locally. Model and annotation outputs are generated during execution.
 
 ```text
 LEMC/
