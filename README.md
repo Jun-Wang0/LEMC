@@ -19,7 +19,7 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | [data/SST2/](data/SST2/) | SST-2 train/validation CSVs and metaphor-labeled versions. |
 | [data/VUA18/](data/VUA18/) | VUA-18 train/validation/test TSVs for metaphor detection. |
 
-The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, and VUA-18 dataset files in `data/`. Dataset CSVs and TSVs are stored with Git LFS. VUA-20 is downloaded by the detection notebook. The full source `Books.jsonl`, trained checkpoints, and the manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
+The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, and VUA-18 dataset files in `data/`. Dataset CSVs and TSVs are stored with Git LFS. VUA-20 is downloaded by the detection notebook.
 
 The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books review CSV files** and implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, SST-2, IMDb, baselines, and ablations; separate ready-to-run configurations for all of these experiments are not included.
 
