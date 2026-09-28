@@ -14,8 +14,11 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | [Metaphor_Sentiment.ipynb](Metaphor_Sentiment.ipynb) | First annotates review text with word-level metaphor predictions; then trains a RoBERTa sentiment classifier using those predictions. |
 | [README.md](README.md) | Data sources, environment setup, methodology, and instructions for running the notebooks. |
 | [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx) | Concreteness ratings workbook used by both notebooks. |
+| [data/Book/](data/Book/) | Books train/test CSVs, metaphor-labeled versions, and the sampling/preprocessing notebook. |
+| [data/IMDB/](data/IMDB/) | IMDb train/test CSVs and metaphor-labeled versions. |
+| [data/SST2/](data/SST2/) | SST-2 train/validation CSVs and metaphor-labeled versions. |
 
-The repository contains notebook source code and the concreteness ratings workbook in `resources/`. The metaphor and sentiment datasets, trained checkpoints, and manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
+The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, and SST-2 sentiment files in `data/`. Dataset CSVs are stored with Git LFS. VUA data, the full source `Books.jsonl`, trained checkpoints, and the manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
 
 The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books review CSV files** and implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, SST-2, IMDb, baselines, and ablations; separate ready-to-run configurations for all of these experiments are not included.
 
@@ -64,9 +67,27 @@ Other fields in the distribution are not required by this loader. Preserve the o
 | IMDb | [stanfordnlp/imdb](https://huggingface.co/datasets/stanfordnlp/imdb); 25,000 training and 25,000 test reviews. |
 | Amazon Books | [Amazon Reviews 2023](https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023); a study-specific sample of 70,000 reviews, split into 56,000 training and 14,000 test examples. |
 
-The sentiment notebook reads local CSV files; it does not download or construct these sentiment datasets. The original Books sample, its selection procedure, and its rating-to-binary-label conversion are not included, so the precise study subset cannot be reconstructed from these notebooks alone.
+The sentiment notebook reads local CSV files. The supplied files retain their original names and subdirectories. Row counts below exclude headers and were checked from the CSV records:
 
-For the annotation stage, prepare `train.csv` and `test.csv` with:
+| Dataset directory | Original files (train / evaluation) | Labeled files (train / evaluation) | Rows (train / evaluation) |
+| --- | --- | --- | ---: |
+| `data/Book/` | `Original/train.csv` / `Original/test.csv` | `Labeled/train_book_metaphor.csv` / `Labeled/test_book_metaphor.csv` | 56,000 / 14,000 |
+| `data/IMDB/` | `Original/train_imdb_with_metaphor_pos.csv` / `Original/test_imdb_with_metaphor_pos.csv` | `Labeled/train_imdb_metaphor.csv` / `Labeled/test_imdb_metaphor.csv` | 25,000 / 25,000 |
+| `data/SST2/` | `Original/train_sst2_with_metaphor_pos.csv` / `Original/val_sst2_with_metaphor_pos.csv` | `Labeled/train_sst2_metaphor.csv` / `Labeled/test_sst2_metaphor.csv` | 67,349 / 872 |
+
+The SST-2 file named `test_sst2_metaphor.csv` corresponds to the supplied **validation** partition: its text and labels match `val_sst2_with_metaphor_pos.csv`. It is not the official SST-2 test set. Books and IMDb have equal positive/negative counts in each partition. SST-2 has 29,780 negative and 37,569 positive training examples, and 428 negative and 444 positive validation examples.
+
+The folders named `Original` have different schemas:
+
+- **Books:** `label`, `text`, `rating`.
+- **IMDb:** `review`, `label`. Despite the `with_metaphor_pos` filenames, these files contain no metaphor or POS columns.
+- **SST-2:** `sentence`, `label`, `metaphor_features`, `pos_tags`, `pos_id_example`. These files already include an earlier feature representation.
+
+All six files in `Labeled/` contain `review`, `label`, `metaphor_labels`, `pos_tags`, and `w_indices`. Use these files directly for the sentiment classifier, which reads the first three columns. They do not contain the `concreteness_features` column written by the current annotation notebook. Each Original/Labeled pair contains the same review text and sentiment labels; the Books test pair has a different row order, so do not join those files by row number.
+
+The supplied [Book Data process.ipynb](data/Book/Book%20Data%20process.ipynb) documents reservoir sampling of 17,500 reviews per rating from ratings 1, 2, 4, and 5, excluding rating 3. Ratings 1–2 map to negative (`0`), and ratings 4–5 map to positive (`1`). It uses a stratified 80/20 split with `random_state=42`. The notebook contains two alternative processing cells that write the same output filenames; one applies stricter invalid-text filtering. To resample from source, obtain `Books.jsonl`, update the paths, and run the chosen processing cell rather than all cells. Reservoir sampling uses Python's `random` without a fixed seed, so resampling need not recover the supplied subset. Use the included CSVs to retain the released split.
+
+For new annotation runs, the first section of `Metaphor_Sentiment.ipynb` expects `train.csv` and `test.csv` with the following columns. The supplied Books files in `data/Book/Original/` already meet this schema:
 
 | Column | Required value |
 | --- | --- |
@@ -81,7 +102,7 @@ text,label
 "The plot was dull and disappointing.",0
 ```
 
-To use SST-2, export its `sentence` column as `text` and use its validation partition for the manuscript's evaluation setting. For IMDb, use the labeled train/test partitions and retain `text` and `label`. Pass these CSVs through the same annotation stage before sentiment training.
+To regenerate annotations for the supplied SST-2 files, rename `sentence` to `text`, retain `text` and `label`, and export train/validation as `train.csv` and `test.csv` in a separate working directory. For IMDb, rename `review` to `text` and export its train/test files in the same format. Set `book_dir` to that directory. Existing files in `Labeled/` can be used for sentiment training without regenerating annotations.
 
 ### Lexical resources
 
@@ -106,13 +127,17 @@ Use Python 3.12 with JupyterLab, Jupyter Notebook, or Google Colab as a starting
 | `tqdm` | Progress bars. |
 | `jupyterlab`, `ipykernel` | Local notebook execution. |
 
-Clone the repository and create an environment:
+Install [Git LFS](https://git-lfs.com/) before cloning so that dataset CSVs are downloaded as full files. Then clone the repository and create an environment:
 
 ```bash
+git lfs install
 git clone https://github.com/Jun-Wang0/LEMC.git
 cd LEMC
+git lfs pull
 python -m venv .venv
 ```
+
+For an existing clone, run `git pull` and `git lfs pull` from the repository root. If a CSV contains a short `version https://git-lfs.github.com/spec/v1` pointer instead of tabular data, install Git LFS and run `git lfs pull` before loading it.
 
 Activate it with `.venv\Scripts\Activate.ps1` in Windows PowerShell, or `source .venv/bin/activate` on Linux/macOS. Install PyTorch using the command appropriate for your hardware from the [official installation guide](https://pytorch.org/get-started/locally/), then install the remaining packages:
 
@@ -128,11 +153,11 @@ The Transformers 4.x range is a setup starting point for the notebook API, not a
 
 ## Usage instructions
 
-Run the stages in this order: **train the detector → annotate sentiment data → train the sentiment classifier**. Edit configuration before executing the large code cells, because each includes an `if __name__ == "__main__": main()` call that starts its pipeline immediately.
+For a complete new run, use this order: **train the detector → annotate sentiment data → train the sentiment classifier**. To train only the sentiment classifier with the supplied `Labeled/` files, proceed directly to step 4. Edit configuration before executing the large code cells, because each includes an `if __name__ == "__main__": main()` call that starts its pipeline immediately.
 
 ### 1. Prepare local paths
 
-The following is a suggested working layout. The two notebooks, README, and `resources/Concreteness ratings.xlsx` are supplied by the repository. Create the data directories and provide the sentiment CSV files locally. Model and annotation outputs are generated during execution.
+The repository includes the following 13 dataset files: 12 CSVs and one preprocessing notebook. `checkpoints/` and `outputs/` below are working directories created during execution.
 
 ```text
 LEMC/
@@ -142,9 +167,28 @@ LEMC/
 ├── resources/
 │   └── Concreteness ratings.xlsx
 ├── data/
-│   └── books/
-│       ├── train.csv
-│       └── test.csv
+│   ├── Book/
+│   │   ├── Book Data process.ipynb
+│   │   ├── Original/
+│   │   │   ├── train.csv
+│   │   │   └── test.csv
+│   │   └── Labeled/
+│   │       ├── train_book_metaphor.csv
+│   │       └── test_book_metaphor.csv
+│   ├── IMDB/
+│   │   ├── Original/
+│   │   │   ├── train_imdb_with_metaphor_pos.csv
+│   │   │   └── test_imdb_with_metaphor_pos.csv
+│   │   └── Labeled/
+│   │       ├── train_imdb_metaphor.csv
+│   │       └── test_imdb_metaphor.csv
+│   └── SST2/
+│       ├── Original/
+│       │   ├── train_sst2_with_metaphor_pos.csv
+│       │   └── val_sst2_with_metaphor_pos.csv
+│       └── Labeled/
+│           ├── train_sst2_metaphor.csv
+│           └── test_sst2_metaphor.csv
 ├── checkpoints/
 │   └── metaphor/
 └── outputs/
@@ -159,7 +203,7 @@ Relative paths below assume that the notebook working directory is the repositor
 | Detection / `train_model()` | `model_save_dir` | `"./checkpoints/metaphor"` |
 | Sentiment / first `main()` | `model_path` | `"./checkpoints/metaphor"` |
 | Sentiment / first `main()` | `concreteness_path` | `"./resources/Concreteness ratings.xlsx"` |
-| Sentiment / first `main()` | `book_dir` | `"./data/books"` |
+| Sentiment / first `main()` | `book_dir` | `"./data/Book/Original"` |
 | Sentiment / first `main()` | `save_dir` | `"./outputs/sentiment"` |
 | Sentiment / second `main()` | `TRAIN_FILE` | `"./outputs/sentiment/train_book_with_metaphor_pos.csv"` |
 | Sentiment / second `main()` | `TEST_FILE` | `"./outputs/sentiment/test_book_with_metaphor_pos.csv"` |
@@ -214,7 +258,13 @@ for _, row in annotated.iterrows():
 
 ### 4. Train and evaluate the sentiment classifier
 
-Set `TRAIN_FILE` and `TEST_FILE` in the second code section to the generated CSVs, then run the section under **Sentiment Analysis using metaphor_features**.
+Set `TRAIN_FILE` and `TEST_FILE` in the second code section to either your generated CSVs or one of the supplied pairs below, then run the section under **Sentiment Analysis using metaphor_features**. Using the supplied pairs requires no detector checkpoint and no rerun of the first annotation section.
+
+| Dataset | `TRAIN_FILE` | `TEST_FILE` |
+| --- | --- | --- |
+| Books | `"./data/Book/Labeled/train_book_metaphor.csv"` | `"./data/Book/Labeled/test_book_metaphor.csv"` |
+| IMDb | `"./data/IMDB/Labeled/train_imdb_metaphor.csv"` | `"./data/IMDB/Labeled/test_imdb_metaphor.csv"` |
+| SST-2 | `"./data/SST2/Labeled/train_sst2_metaphor.csv"` | `"./data/SST2/Labeled/test_sst2_metaphor.csv"` (validation) |
 
 `MetaphorSentimentDataset` reads `review`, `label`, and `metaphor_labels`; it also accepts `sentence` and `sentiment` as aliases for the first two columns. A fast RoBERTa tokenizer aligns the word-level metaphor labels to subword tokens. `RobertaMetaphorNoAttention` embeds those binary labels, concatenates them with RoBERTa token representations, applies a projection, and uses masked mean pooling for classification. The exported POS tags and concreteness averages are not inputs to this classifier.
 
@@ -306,4 +356,4 @@ Publication year, journal details, and DOI should be added when a final bibliogr
 
 No repository-level `LICENSE` file has been provided. Contact the maintainers through [GitHub Issues](https://github.com/Jun-Wang0/LEMC/issues) to clarify code reuse and redistribution terms. Third-party datasets, lexical resources, and pretrained models retain their own licenses and conditions; consult their source pages.
 
-For a bug report or proposed improvement, open an issue or submit a pull request. Include the affected notebook/section, environment and package versions, dataset/split, configuration, and a minimal example or error trace. Document any changes to preprocessing or evaluation so that their effects can be assessed, and avoid adding local datasets, model checkpoints, or machine-specific paths to a contribution.
+For a bug report or proposed improvement, open an issue or submit a pull request. Include the affected notebook/section, environment and package versions, dataset/split, configuration, and a minimal example or error trace. Document any changes to preprocessing or evaluation so that their effects can be assessed. For data contributions, document sources and preparation and store dataset CSV files through Git LFS. Avoid adding model checkpoints or machine-specific paths to a contribution.
