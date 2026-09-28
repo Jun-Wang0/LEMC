@@ -17,8 +17,9 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | [data/Book/](data/Book/) | Books train/test CSVs, metaphor-labeled versions, and the sampling/preprocessing notebook. |
 | [data/IMDB/](data/IMDB/) | IMDb train/test CSVs and metaphor-labeled versions. |
 | [data/SST2/](data/SST2/) | SST-2 train/validation CSVs and metaphor-labeled versions. |
+| [data/VUA18/](data/VUA18/) | VUA-18 train/validation/test TSVs for metaphor detection. |
 
-The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, and SST-2 sentiment files in `data/`. Dataset CSVs are stored with Git LFS. VUA data, the full source `Books.jsonl`, trained checkpoints, and the manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
+The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, and VUA-18 dataset files in `data/`. Dataset CSVs and TSVs are stored with Git LFS. VUA-20 is downloaded by the detection notebook. The full source `Books.jsonl`, trained checkpoints, and the manuscript PDF are not bundled. There is no command-line training entry point or `requirements.txt`; configuration is edited directly in the notebook cells.
 
 The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books review CSV files** and implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, SST-2, IMDb, baselines, and ablations; separate ready-to-run configurations for all of these experiments are not included.
 
@@ -55,7 +56,32 @@ Each example represents one target occurrence. `MetaphorDataset` reads the follo
 | `label` | Integer: `0` for literal, `1` for metaphorical. |
 | `POS` | Target word's part-of-speech tag, such as `NOUN` or `VERB`. |
 
-Other fields in the distribution are not required by this loader. Preserve the original token spacing and target indices when preparing another dataset. For VUA-18, obtain the appropriate shared-task data and adapt the loader to this schema; the notebook does not switch datasets automatically. See the [2018 shared-task report](https://aclanthology.org/W18-0907/) and [2020 shared-task report](https://aclanthology.org/2020.figlang-1.3/) for benchmark details.
+Other fields in the distribution are not required by this loader. Preserve the original token spacing and target indices when preparing another dataset. The supplied VUA-18 TSVs contain `index`, `label`, `sentence`, `POS`, and `w_index`, matching the required fields above:
+
+| File | Partition | Target-occurrence records (excluding header) |
+| --- | --- | ---: |
+| `data/VUA18/train.tsv` | Train | 101,975 |
+| `data/VUA18/val.tsv` | Validation | 34,253 |
+| `data/VUA18/test.tsv` | Test | 43,947 |
+
+These counts describe the supplied files and differ from the annotated-token totals reported in the manuscript table; the files are provided unchanged. The notebook does not switch datasets automatically. To use the bundled VUA-18 files, replace its VUA-20 download and split assignments with:
+
+```python
+dataset = load_dataset(
+    "csv",
+    data_files={
+        "train": "./data/VUA18/train.tsv",
+        "validation": "./data/VUA18/val.tsv",
+        "test": "./data/VUA18/test.tsv",
+    },
+    delimiter="\t",
+)
+train_data = dataset["train"]
+val_data = dataset["validation"]
+test_data = dataset["test"]
+```
+
+Use `val_data` for checkpoint selection and evaluate `test_data` separately after selection. See the [2018 shared-task report](https://aclanthology.org/W18-0907/) and [2020 shared-task report](https://aclanthology.org/2020.figlang-1.3/) for benchmark details.
 
 **Evaluation split:** the current detection code assigns `dataset["test"]` to `val_data` and selects the best checkpoint using its F1. Its printed "Validation Metrics" therefore refer to that test partition. For an independent held-out evaluation, create a development split from the training data, use it for checkpoint selection, and evaluate the test partition only after selection.
 
@@ -118,8 +144,8 @@ Use Python 3.12 with JupyterLab, Jupyter Notebook, or Google Colab as a starting
 | --- | --- |
 | `torch` | Models, training, GPU execution, and checkpoints. |
 | `transformers` | RoBERTa models, tokenizers, configuration, and learning-rate scheduling. |
-| `datasets` | VUA-20 download and loading. |
-| `pandas`, `numpy` | CSV/Excel processing and numerical operations. |
+| `datasets` | VUA-20 download and local VUA-18 TSV loading. |
+| `pandas`, `numpy` | CSV/TSV/Excel processing and numerical operations. |
 | `openpyxl` | Reading the concreteness `.xlsx` workbook with pandas. |
 | `scikit-learn` | Accuracy, precision, recall, and F1. |
 | `nltk` | WordNet resources. |
@@ -127,7 +153,7 @@ Use Python 3.12 with JupyterLab, Jupyter Notebook, or Google Colab as a starting
 | `tqdm` | Progress bars. |
 | `jupyterlab`, `ipykernel` | Local notebook execution. |
 
-Install [Git LFS](https://git-lfs.com/) before cloning so that dataset CSVs are downloaded as full files. Then clone the repository and create an environment:
+Install [Git LFS](https://git-lfs.com/) before cloning so that dataset CSVs and TSVs are downloaded as full files. Then clone the repository and create an environment:
 
 ```bash
 git lfs install
@@ -137,7 +163,7 @@ git lfs pull
 python -m venv .venv
 ```
 
-For an existing clone, run `git pull` and `git lfs pull` from the repository root. If a CSV contains a short `version https://git-lfs.github.com/spec/v1` pointer instead of tabular data, install Git LFS and run `git lfs pull` before loading it.
+For an existing clone, run `git pull` and `git lfs pull` from the repository root. If a CSV or TSV contains a short `version https://git-lfs.github.com/spec/v1` pointer instead of tabular data, install Git LFS and run `git lfs pull` before loading it.
 
 Activate it with `.venv\Scripts\Activate.ps1` in Windows PowerShell, or `source .venv/bin/activate` on Linux/macOS. Install PyTorch using the command appropriate for your hardware from the [official installation guide](https://pytorch.org/get-started/locally/), then install the remaining packages:
 
@@ -157,7 +183,7 @@ For a complete new run, use this order: **train the detector → annotate sentim
 
 ### 1. Prepare local paths
 
-The repository includes the following 13 dataset files: 12 CSVs and one preprocessing notebook. `checkpoints/` and `outputs/` below are working directories created during execution.
+The repository includes the following 16 dataset files: 12 CSVs, three TSVs, and one preprocessing notebook. `checkpoints/` and `outputs/` below are working directories created during execution.
 
 ```text
 LEMC/
@@ -182,13 +208,17 @@ LEMC/
 │   │   └── Labeled/
 │   │       ├── train_imdb_metaphor.csv
 │   │       └── test_imdb_metaphor.csv
-│   └── SST2/
-│       ├── Original/
-│       │   ├── train_sst2_with_metaphor_pos.csv
-│       │   └── val_sst2_with_metaphor_pos.csv
-│       └── Labeled/
-│           ├── train_sst2_metaphor.csv
-│           └── test_sst2_metaphor.csv
+│   ├── SST2/
+│   │   ├── Original/
+│   │   │   ├── train_sst2_with_metaphor_pos.csv
+│   │   │   └── val_sst2_with_metaphor_pos.csv
+│   │   └── Labeled/
+│   │       ├── train_sst2_metaphor.csv
+│   │       └── test_sst2_metaphor.csv
+│   └── VUA18/
+│       ├── train.tsv
+│       ├── val.tsv
+│       └── test.tsv
 ├── checkpoints/
 │   └── metaphor/
 └── outputs/
@@ -356,4 +386,4 @@ Publication year, journal details, and DOI should be added when a final bibliogr
 
 No repository-level `LICENSE` file has been provided. Contact the maintainers through [GitHub Issues](https://github.com/Jun-Wang0/LEMC/issues) to clarify code reuse and redistribution terms. Third-party datasets, lexical resources, and pretrained models retain their own licenses and conditions; consult their source pages.
 
-For a bug report or proposed improvement, open an issue or submit a pull request. Include the affected notebook/section, environment and package versions, dataset/split, configuration, and a minimal example or error trace. Document any changes to preprocessing or evaluation so that their effects can be assessed. For data contributions, document sources and preparation and store dataset CSV files through Git LFS. Avoid adding model checkpoints or machine-specific paths to a contribution.
+For a bug report or proposed improvement, open an issue or submit a pull request. Include the affected notebook/section, environment and package versions, dataset/split, configuration, and a minimal example or error trace. Document any changes to preprocessing or evaluation so that their effects can be assessed. For data contributions, document sources and preparation and store dataset CSV/TSV files through Git LFS. Avoid adding model checkpoints or machine-specific paths to a contribution.
