@@ -11,7 +11,7 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | File | Purpose |
 | --- | --- |
 | [Metaphor_Detection.ipynb](Metaphor_Detection.ipynb) | Loads VUA-20, extracts concreteness and WordNet features, trains the LEMC detector, evaluates predictions, and saves the best checkpoint. |
-| [Metaphor_Sentiment.ipynb](Metaphor_Sentiment.ipynb) | First annotates review text with word-level metaphor predictions; then trains a RoBERTa sentiment classifier using those predictions. |
+| [Metaphor_Sentiment.ipynb](Metaphor_Sentiment.ipynb) | Selects Books, IMDb, or SST-2, optionally generates word-level metaphor annotations, and trains a RoBERTa sentiment classifier using bundled or regenerated annotations. |
 | [README.md](README.md) | Data sources, environment setup, methodology, and instructions for running the notebooks. |
 | [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx) | Concreteness ratings workbook used by both notebooks. |
 | [data/Book/](data/Book/) | Books train/test CSVs, metaphor-labeled versions, and the sampling/preprocessing notebook. |
@@ -21,7 +21,7 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 
 The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, and VUA-18 dataset files in `data/`. Dataset CSVs and TSVs are stored with Git LFS. VUA-20 is downloaded by the detection notebook.
 
-The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books review CSV files** and implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, SST-2, IMDb, baselines, and ablations; separate ready-to-run configurations for all of these experiments are not included.
+The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books with the bundled metaphor-labeled CSV files** and supports `Book`, `IMDB`, and `SST2` through one configuration setting. It implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, baselines, and ablations; separate ready-to-run configurations for every reported experiment are not included.
 
 ## Dataset information
 
@@ -109,18 +109,19 @@ The folders named `Original` have different schemas:
 - **IMDb:** `review`, `label`. Despite the `with_metaphor_pos` filenames, these files contain no metaphor or POS columns.
 - **SST-2:** `sentence`, `label`, `metaphor_features`, `pos_tags`, `pos_id_example`. These files already include an earlier feature representation.
 
-All six files in `Labeled/` contain `review`, `label`, `metaphor_labels`, `pos_tags`, and `w_indices`. Use these files directly for the sentiment classifier, which reads the first three columns. They do not contain the `concreteness_features` column written by the current annotation notebook. Each Original/Labeled pair contains the same review text and sentiment labels; the Books test pair has a different row order, so do not join those files by row number.
+All six files in `Labeled/` contain `review`, `label`, `metaphor_labels`, `pos_tags`, and `w_indices`. The default configuration selects the appropriate pair automatically. For these existing files, the sentiment loader reconstructs tokens with spaCy's English tokenizer and requires exact token/label counts. The one supported truncation case is an IMDb record with 200 labels and more than 200 tokens, for which it keeps the first 200 tokens. Newly generated annotations also include `metaphor_words`, which the loader uses directly for word-to-subword alignment. Each Original/Labeled pair contains the same review text and sentiment labels; the Books test pair has a different row order, so do not join those files by row number.
 
 The supplied [Book Data process.ipynb](data/Book/Book%20Data%20process.ipynb) documents reservoir sampling of 17,500 reviews per rating from ratings 1, 2, 4, and 5, excluding rating 3. Ratings 1–2 map to negative (`0`), and ratings 4–5 map to positive (`1`). It uses a stratified 80/20 split with `random_state=42`. The notebook contains two alternative processing cells that write the same output filenames; one applies stricter invalid-text filtering. To resample from source, obtain `Books.jsonl`, update the paths, and run the chosen processing cell rather than all cells. Reservoir sampling uses Python's `random` without a fixed seed, so resampling need not recover the supplied subset. Use the included CSVs to retain the released split.
 
-For new annotation runs, the first section of `Metaphor_Sentiment.ipynb` expects `train.csv` and `test.csv` with the following columns. The supplied Books files in `data/Book/Original/` already meet this schema:
+For new annotation runs, `Metaphor_Sentiment.ipynb` reads the supplied `Original/` files using the following dataset-specific text columns:
 
-| Column | Required value |
-| --- | --- |
-| `text` | Non-empty review or sentence text. |
-| `label` | Integer `0` or `1`, with a documented sentiment mapping used consistently across partitions. The example below uses `0` = negative and `1` = positive. |
+| `DATASET_NAME` | Text column | Evaluation partition |
+| --- | --- | --- |
+| `"Book"` | `text` | Test |
+| `"IMDB"` | `review` | Test |
+| `"SST2"` | `sentence` | Validation |
 
-For example, this is a format illustration, not a record from the study:
+All three datasets use a `label` column with `0` = negative and `1` = positive. The notebook handles the existing filenames and column names without renaming or exporting the source CSVs. For a custom file, use the configured text column and a consistent binary sentiment mapping. For example, this illustrates the Books input format; it is not a record from the study:
 
 ```csv
 text,label
@@ -128,13 +129,13 @@ text,label
 "The plot was dull and disappointing.",0
 ```
 
-To regenerate annotations for the supplied SST-2 files, rename `sentence` to `text`, retain `text` and `label`, and export train/validation as `train.csv` and `test.csv` in a separate working directory. For IMDb, rename `review` to `text` and export its train/test files in the same format. Set `book_dir` to that directory. Existing files in `Labeled/` can be used for sentiment training without regenerating annotations.
+Set `USE_PRECOMPUTED_LABELS=False` to regenerate both the training and evaluation annotations from the selected dataset's `Original/` files. The default, `True`, uses its bundled `Labeled/` files and skips annotation.
 
 ### Lexical resources
 
-- **Concreteness ratings:** use the bundled [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx), associated with [Brysbaert, Warriner, and Kuperman (2014)](https://doi.org/10.3758/s13428-013-0403-5). Set the workbook paths in both notebooks to `./resources/Concreteness ratings.xlsx` as shown below. The notebooks expect columns named exactly `Word` and `Conc.M`. Ratings range from 1 to 5; words missing from the lookup receive `3.0`.
+- **Concreteness ratings:** use the bundled [resources/Concreteness ratings.xlsx](resources/Concreteness%20ratings.xlsx), associated with [Brysbaert, Warriner, and Kuperman (2014)](https://doi.org/10.3758/s13428-013-0403-5). Set the workbook path in the detection notebook as shown below; the sentiment configuration already points to this resource. The notebooks expect columns named exactly `Word` and `Conc.M`. Ratings range from 1 to 5; words missing from the lookup receive `3.0`.
 - **WordNet:** downloaded through NLTK. The code uses the first returned synset, its definition, shortest-path distances, and lowest-common-hypernym depths.
-- **spaCy English model:** `en_core_web_sm` supplies POS tags during sentiment-data annotation.
+- **spaCy:** `en_core_web_sm` supplies tokens and POS tags during sentiment-data annotation. Training with the bundled labeled files uses the blank English tokenizer, so that step needs the spaCy library but does not load the POS model.
 
 ## Requirements and installation
 
@@ -175,11 +176,11 @@ python -m ipykernel install --user --name lemc --display-name "Python (LEMC)"
 python -m jupyterlab
 ```
 
-The Transformers 4.x range is a setup starting point for the notebook API, not a verified original version or a guarantee of exact reproduction. Select the `Python (LEMC)` kernel in Jupyter. In Colab, install packages in the notebook runtime and mount Google Drive if retaining the existing Drive paths. The detection notebook's first cell runs `!pip install -U datasets`; skip or adjust it if you want to keep a pinned environment.
+The Transformers 4.x range is a setup starting point for the notebook API, not a verified original version or a guarantee of exact reproduction. Select the `Python (LEMC)` kernel in Jupyter. In Colab, clone the repository in the runtime and set the notebook's working directory to that clone; mount Google Drive only if using files stored there. The detection notebook's first cell runs `!pip install -U datasets`; skip or adjust it if you want to keep a pinned environment.
 
 ## Usage instructions
 
-For a complete new run, use this order: **train the detector → annotate sentiment data → train the sentiment classifier**. To train only the sentiment classifier with the supplied `Labeled/` files, proceed directly to step 4. Edit configuration before executing the large code cells, because each includes an `if __name__ == "__main__": main()` call that starts its pipeline immediately.
+For a complete new annotation run, use this order: **train the detector → annotate sentiment data → train the sentiment classifier**. To train the sentiment classifier with the supplied `Labeled/` files, run the sentiment notebook's shared configuration cell and proceed directly to step 4. With the default `USE_PRECOMPUTED_LABELS=True`, running all sentiment notebook cells also skips annotation. Edit and run the configuration before the pipeline cells, which start their work immediately when executed.
 
 ### 1. Prepare local paths
 
@@ -225,20 +226,19 @@ LEMC/
     └── sentiment/
 ```
 
-Relative paths below assume that the notebook working directory is the repository root. Replace the existing `/content/drive/MyDrive/...` paths as follows, or use your own absolute paths:
+The sentiment notebook locates the repository root by searching the working directory and its ancestors for `Metaphor_Sentiment.ipynb` and `data/`. Launch Jupyter from the clone or one of its subdirectories. Its shared configuration supplies the dataset and resource paths automatically:
 
-| Notebook / location | Setting | Example replacement |
+| Notebook / location | Setting | Value or required edit |
 | --- | --- | --- |
-| Detection / `main()` | `path_to_concreteness_data` | `"./resources/Concreteness ratings.xlsx"` |
-| Detection / `train_model()` | `model_save_dir` | `"./checkpoints/metaphor"` |
-| Sentiment / first `main()` | `model_path` | `"./checkpoints/metaphor"` |
-| Sentiment / first `main()` | `concreteness_path` | `"./resources/Concreteness ratings.xlsx"` |
-| Sentiment / first `main()` | `book_dir` | `"./data/Book/Original"` |
-| Sentiment / first `main()` | `save_dir` | `"./outputs/sentiment"` |
-| Sentiment / second `main()` | `TRAIN_FILE` | `"./outputs/sentiment/train_book_with_metaphor_pos.csv"` |
-| Sentiment / second `main()` | `TEST_FILE` | `"./outputs/sentiment/test_book_with_metaphor_pos.csv"` |
+| Detection / `main()` | `path_to_concreteness_data` | Replace the existing path with `"./resources/Concreteness ratings.xlsx"`. |
+| Detection / `train_model()` | `model_save_dir` | Replace the existing path with `"./checkpoints/metaphor"`. |
+| Sentiment / shared configuration | `DATASET_NAME` | `"Book"` (default), `"IMDB"`, or `"SST2"`. |
+| Sentiment / shared configuration | `USE_PRECOMPUTED_LABELS` | `True` (default) selects bundled `Labeled/` files; `False` selects newly generated annotations. |
+| Sentiment / shared configuration | `MODEL_PATH` | `REPO_ROOT / "checkpoints" / "metaphor"`; needed only to regenerate annotations. |
+| Sentiment / shared configuration | `CONCRETENESS_PATH` | `REPO_ROOT / "resources" / "Concreteness ratings.xlsx"`. |
+| Sentiment / shared configuration | `OUTPUT_ROOT` | `REPO_ROOT / "outputs" / "sentiment"`; generated files are stored in its selected-dataset subdirectory. |
 
-These edits connect the stages: the original annotation checkpoint path differs from the detector's save path, and the original sentiment-training filenames differ from the annotation outputs.
+The detection path examples assume execution from the repository root. To regenerate sentiment annotations, save a compatible detector checkpoint at `MODEL_PATH` or update that setting to its actual directory. Change `DATASET_NAME` and rerun the configuration cell to switch datasets; training and annotation use the same selection.
 
 ### 2. Train and evaluate the metaphor detector
 
@@ -257,48 +257,63 @@ To experiment with RoBERTa-base, change the call in `main()` to `build_model(mod
 
 ### 3. Generate metaphor features for sentiment data
 
-Open `Metaphor_Sentiment.ipynb` and run the first code section, under **Predict and save metaphor_features (Train and Test Sets)**, after updating its paths. It loads the trained detector, predicts one metaphor label per whitespace-delimited review word, obtains POS and lexical features, and writes:
+Open `Metaphor_Sentiment.ipynb`, select `DATASET_NAME`, set `USE_PRECOMPUTED_LABELS=False`, and run the shared configuration cell. Then run **Predict and save metaphor_features (Train and Test Sets)**. `MODEL_PATH` must contain the compatible model configuration, tokenizer, and full custom `pytorch_model.bin` state dictionary. Loading is strict: a checkpoint with incompatible layers or dimensions must be corrected before inference.
 
-- `train_book_with_metaphor_pos.csv`
-- `test_book_with_metaphor_pos.csv`
+The annotation section reads both selected `Original/` splits, tokenizes each review with spaCy, and processes its first 200 tokens. It predicts metaphor labels for nouns, verbs, adjectives, and adverbs; other POS tags receive `0` (literal). Each target uses a context window of up to 60 words on either side and cached WordNet feature calculations. Inference uses micro-batches of 50 reviews, model batches of 512 targets, and automatic mixed precision on CUDA. Reduce the batch settings if GPU memory is insufficient.
+
+Generated files are written to `outputs/sentiment/<DATASET_NAME>/`:
+
+| `DATASET_NAME` | Training file | Evaluation file |
+| --- | --- | --- |
+| `"Book"` | `train_book_metaphor.csv` | `test_book_metaphor.csv` |
+| `"IMDB"` | `train_imdb_metaphor.csv` | `test_imdb_metaphor.csv` |
+| `"SST2"` | `train_sst2_metaphor.csv` | `val_sst2_metaphor.csv` |
+
+`START_INDEX=0` and `END_INDEX=None` process each complete split. For a smaller run, set an inclusive starting row and an exclusive ending row before rerunning the configuration. These indices apply after filtering missing or empty review text. Nondefault ranges add a `_START_END` suffix, or `_START_end` when the ending index is `None`, to the generated filenames. The classifier then uses the corresponding generated files.
+
+Each split is written to a `.partial.csv` file and moved to its final filename only after processing completes. An interrupted run leaves the partial file; any earlier completed output remains in place. Rerunning the same range starts that partial file again and replaces the final output when complete. Finish both splits before training from regenerated data.
 
 The output columns are:
 
 | Column | Contents |
 | --- | --- |
-| `review` | Original input text. |
+| `review` | Full original input text, including any text beyond the 200-token annotation limit. |
 | `label` | Original binary sentiment label. |
-| `metaphor_labels` | String representation of a list of word-level `0`/`1` predictions. |
-| `concreteness_features` | String representation of the six lexical features averaged across target words. |
-| `pos_tags` | String representation of spaCy-tokenized POS tags, truncated/padded with `PAD` to the configured length; these may not align one-for-one with whitespace-based metaphor labels. |
-| `w_indices` | String representation of the original word-index list. |
+| `metaphor_words` | Serialized list of the processed spaCy tokens, up to 200 tokens per review. |
+| `metaphor_labels` | Serialized list of aligned `0`/`1` predictions; skipped POS tags have label `0`. |
+| `pos_tags` | Serialized list of POS tags aligned with `metaphor_words`. |
+| `w_indices` | Serialized list of zero-based indices into `metaphor_words`. |
 
-This stage performs detector inference separately for each word, so it can take substantially longer than a single prediction per review. Reject empty or missing review text before annotation. Inspect a small subset first and verify the word/label counts after parsing the stored list:
+The six lexical features are computed for detector inference and are not exported as a `concreteness_features` column. The four serialized lists have equal lengths; they describe the processed tokens rather than every word in the full `review`. Inspect a small subset first and verify alignment after parsing the stored lists:
 
 ```python
 import ast
 import pandas as pd
 
-annotated = pd.read_csv("./outputs/sentiment/train_book_with_metaphor_pos.csv")
+annotated = pd.read_csv("./outputs/sentiment/Book/train_book_metaphor.csv")
 for _, row in annotated.iterrows():
+    words = ast.literal_eval(row["metaphor_words"])
     labels = ast.literal_eval(row["metaphor_labels"])
-    assert len(labels) == len(row["review"].split())
+    pos_tags = ast.literal_eval(row["pos_tags"])
+    indices = ast.literal_eval(row["w_indices"])
+    assert len(words) == len(labels) == len(pos_tags) == len(indices)
+    assert indices == list(range(len(words)))
     assert all(label in (0, 1) for label in labels)
 ```
 
 ### 4. Train and evaluate the sentiment classifier
 
-Set `TRAIN_FILE` and `TEST_FILE` in the second code section to either your generated CSVs or one of the supplied pairs below, then run the section under **Sentiment Analysis using metaphor_features**. Using the supplied pairs requires no detector checkpoint and no rerun of the first annotation section.
+Run the shared configuration cell with the desired `DATASET_NAME`, then run **Sentiment Analysis using metaphor_features**. With `USE_PRECOMPUTED_LABELS=True`, the notebook selects the supplied pair below automatically; no detector checkpoint or annotation run is required. With `False`, first complete step 3, then train from its generated files. The architecture, loss, and default training schedule are the same for all three dataset selections.
 
-| Dataset | `TRAIN_FILE` | `TEST_FILE` |
+| Dataset | Selected training file | Selected evaluation file |
 | --- | --- | --- |
 | Books | `"./data/Book/Labeled/train_book_metaphor.csv"` | `"./data/Book/Labeled/test_book_metaphor.csv"` |
 | IMDb | `"./data/IMDB/Labeled/train_imdb_metaphor.csv"` | `"./data/IMDB/Labeled/test_imdb_metaphor.csv"` |
 | SST-2 | `"./data/SST2/Labeled/train_sst2_metaphor.csv"` | `"./data/SST2/Labeled/test_sst2_metaphor.csv"` (validation) |
 
-`MetaphorSentimentDataset` reads `review`, `label`, and `metaphor_labels`; it also accepts `sentence` and `sentiment` as aliases for the first two columns. A fast RoBERTa tokenizer aligns the word-level metaphor labels to subword tokens. `RobertaMetaphorNoAttention` embeds those binary labels, concatenates them with RoBERTa token representations, applies a projection, and uses masked mean pooling for classification. The exported POS tags and concreteness averages are not inputs to this classifier.
+`MetaphorSentimentDataset` reads the review text, sentiment label, and metaphor labels. It uses `metaphor_words` when available; for bundled files without that column, it reconstructs spaCy tokens. Counts must match exactly, except that an IMDb record with 200 labels may use the first 200 tokens of a longer review. Other mismatches raise an error with instructions to regenerate annotations. A fast RoBERTa tokenizer aligns those word-level labels to subword tokens. `RobertaMetaphorNoAttention` embeds the binary metaphor labels, concatenates them with RoBERTa token representations, applies a projection, and uses masked mean pooling for classification. POS tags and lexical features are not direct inputs to this classifier.
 
-The notebook prints accuracy, precision, recall, and F1 after each epoch, treating label `1` as the positive class for precision/recall/F1. The variable named `TEST_FILE` supplies this repeated evaluation set; use a separate development set for model selection when reserving a final test set. The checkpoint-saving line in this section is commented out, so sentiment weights are **not saved by default**. To retain them, enable saving at the best-F1 branch and save the matching tokenizer/configuration as well.
+The notebook prints accuracy, precision, recall, and F1 after each epoch, treating label `1` as the positive class for precision/recall/F1. `EVAL_FILE` supplies this repeated evaluation set, and the printed metrics identify it as test or validation according to the selected dataset; use a separate development set for model selection when reserving a final test set. The checkpoint-saving line in this section is commented out, so sentiment weights are **not saved by default**. To retain them, enable saving at the best-F1 branch and save the matching tokenizer/configuration as well.
 
 ### Default configuration in the released code
 
@@ -349,9 +364,9 @@ The manuscript reports point estimates without uncertainty intervals or signific
 Additional implementation details to account for:
 
 - Neither notebook fixes all random seeds or includes a complete dependency lock file. Record seeds, package versions, dataset revisions, and split membership for new experiments.
-- Both tasks truncate inputs to 128 tokens. In detection and annotation, truncation can remove a marked target; inspect target masks before applying the pipeline to long text.
-- The two `ConcretenessScorer` implementations differ in their WordNet distance fallback. Detection preserves a valid zero distance, while sentiment annotation uses `distance or 10.0`, which replaces zero as well as missing distances. For consistent features, use the detection notebook's explicit `None` check in the annotation implementation.
-- Reuse the checkpoint's tokenizer, vocabulary size, and POS mapping. When loading a GPU-produced state dictionary on CPU, add `map_location="cpu"` to `torch.load`.
+- Both models encode at most 128 subword tokens. Sentiment annotation first limits each review to 200 spaCy tokens and builds a context window for each predicted target; subword tokenization can still cause a window to exceed the model limit. Inspect target masks when applying the pipeline to long text.
+- Detection and sentiment annotation use different preprocessing and context construction. Annotation caches first-synset WordNet comparisons, preserves valid zero distances, uses `10.0` for unavailable distances, and averages positive lowest-common-hypernym depths. These details affect the lexical features and should be recorded for new experiments.
+- Reuse the checkpoint's tokenizer, vocabulary size, and POS mapping. Sentiment annotation loads the state dictionary strictly with `map_location="cpu"`, then moves the model to the selected device.
 - For a new detection dataset, establish any extended POS-to-ID mapping before constructing the model. The notebook currently builds the model before the dataset can add unseen tags, which can produce out-of-range POS embedding indices.
 - Notebook output cells are saved execution records and may come from earlier code revisions. The current source and its configuration determine a new run's behavior.
 
