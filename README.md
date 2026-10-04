@@ -18,8 +18,9 @@ The accompanying manuscript is by **Jun Wang and Keng Hoon Gan**, School of Comp
 | [data/IMDB/](data/IMDB/) | IMDb train/test CSVs and metaphor-labeled versions. |
 | [data/SST2/](data/SST2/) | SST-2 train/validation CSVs and metaphor-labeled versions. |
 | [data/VUA18/](data/VUA18/) | VUA-18 train/validation/test TSVs for metaphor detection. |
+| [data/VUA20/](data/VUA20/) | VUA-20 train/test TSVs for metaphor detection. |
 
-The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, and VUA-18 dataset files in `data/`. Dataset CSVs and TSVs are stored with Git LFS. VUA-20 is downloaded by the detection notebook.
+The repository contains notebook source code, the concreteness ratings workbook in `resources/`, and the Books, IMDb, SST-2, VUA-18, and VUA-20 dataset files in `data/`. The Books, IMDb, SST-2, and VUA-18 CSV/TSV files use Git LFS; the VUA-20 TSVs are stored as regular Git files. The detection notebook downloads VUA-20 through Hugging Face by default.
 
 The released detection notebook defaults to **VUA-20 with `roberta-large`**. The sentiment notebook defaults to **Books with the bundled metaphor-labeled CSV files** and supports `Book`, `IMDB`, and `SST2` through one configuration setting. It implements concatenation/projection fusion without an attention-based fusion module. The manuscript also reports VUA-18, RoBERTa-base, baselines, and ablations; separate ready-to-run configurations for every reported experiment are not included.
 
@@ -37,7 +38,7 @@ The study uses the VU Amsterdam Metaphor Corpus benchmarks, which contain Englis
 | VUA-20 | Train | 10,909 | 160,154 | 12.0 |
 | VUA-20 | Test | 3,601 | 22,196 | 17.9 |
 
-The detection notebook downloads the [CreativeLang/vua20_metaphor distribution](https://huggingface.co/datasets/CreativeLang/vua20_metaphor) through Hugging Face Datasets:
+The VUA-20 files in [data/VUA20/](data/VUA20/) are unchanged copies of `train.tsv` (160,154 target occurrences) and `test.tsv` (22,196 target occurrences) from the [CreativeLang/vua20_metaphor distribution](https://huggingface.co/datasets/CreativeLang/vua20_metaphor). The detection notebook downloads this distribution through Hugging Face Datasets by default:
 
 ```python
 from datasets import load_dataset
@@ -154,7 +155,7 @@ Use Python 3.12 with JupyterLab, Jupyter Notebook, or Google Colab as a starting
 | `tqdm` | Progress bars. |
 | `jupyterlab`, `ipykernel` | Local notebook execution. |
 
-Install [Git LFS](https://git-lfs.com/) before cloning so that dataset CSVs and TSVs are downloaded as full files. Then clone the repository and create an environment:
+Install [Git LFS](https://git-lfs.com/) before cloning so that the Books, IMDb, SST-2, and VUA-18 dataset files are downloaded in full. The VUA-20 TSVs are included as regular Git files. Then clone the repository and create an environment:
 
 ```bash
 git lfs install
@@ -184,7 +185,7 @@ For a complete new annotation run, use this order: **train the detector → anno
 
 ### 1. Prepare local paths
 
-The repository includes the following 16 dataset files: 12 CSVs, three TSVs, and one preprocessing notebook. `checkpoints/` and `outputs/` below are working directories created during execution.
+The `data/` directory contains 17 tabular dataset files (12 CSVs and five TSVs) and one preprocessing notebook. `checkpoints/` and `outputs/` below are working directories created during execution.
 
 ```text
 LEMC/
@@ -216,9 +217,12 @@ LEMC/
 │   │   └── Labeled/
 │   │       ├── train_sst2_metaphor.csv
 │   │       └── test_sst2_metaphor.csv
-│   └── VUA18/
+│   ├── VUA18/
+│   │   ├── train.tsv
+│   │   ├── val.tsv
+│   │   └── test.tsv
+│   └── VUA20/
 │       ├── train.tsv
-│       ├── val.tsv
 │       └── test.tsv
 ├── checkpoints/
 │   └── metaphor/
